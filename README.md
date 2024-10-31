@@ -88,3 +88,4 @@ flowchart LR
 ## Developer notes
 
 - [ ] Change datetime by iterators?
+- [ ] Automatically create windows jobs
