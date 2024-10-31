@@ -76,7 +76,7 @@ flowchart LR
 ```
 
 ### Complete diagram
-![pipeline](pipeline.svg)
+![pipeline](assets/pipeline.svg)
 
 ## Setup
 

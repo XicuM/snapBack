@@ -4,12 +4,11 @@ from rclone_python import rclone
 from datetime import datetime
 
 
-def get_hourly_dir():
-    hour = str(datetime.now().hour).zfill(2)
+def get_hourly_dir(hour):
     if hour == '00': 
-        return '/hourly.00/'
+        return 'hourly.24'
     elif hour in ['12', '16', '20', '00']:
-        return '/hourly.' + hour + '/'
+        return 'hourly.' + hour
     else: 
         return None
 
@@ -26,18 +25,16 @@ def backup_directory(source, destination, directory):
     with open('backup.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
-    def accumulate(a, b):
-        rclone.copy(
-            os.path.join(destination, a, directory),
-            os.path.join(destination, b, directory),
-            args=['--ignore-existing']
-        )
+    accumulate = lambda a, b: rclone.copy(
+        os.path.join(destination, a, directory),
+        os.path.join(destination, b, directory),
+        args=['--ignore-existing']
+    )
 
-    def replace(a, b):
-        rclone.move(
-            os.path.join(destination, a, directory),
-            os.path.join(destination, b, directory)
-        )
+    replace = lambda a, b: rclone.move(
+        os.path.join(destination, a, directory),
+        os.path.join(destination, b, directory)
+    )
 
     # ------------------------------------------------------------------
     # 1. Sync destination with source and save the incremental output in /temp
@@ -52,7 +49,7 @@ def backup_directory(source, destination, directory):
     # ------------------------------------------------------------------
     # 2. Save the backup in the hourly backup
     
-    if hourly_dir := get_hourly_dir():
+    if hourly_dir := get_hourly_dir(str(datetime.now().hour).zfill(2)):
         rclone.copy(
             os.path.join(destination, 'temp', directory),
             os.path.join(destination, hourly_dir, directory)
