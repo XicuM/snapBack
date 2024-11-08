@@ -21,6 +21,12 @@ def assert_file_content(file, content, message=None):
     with open(file, 'r') as f:
         assert (f.read() == content), message
 
+def assert_file_exists(dir, file):
+    assert (
+        exists(join(dir, file+'.txt')), 
+        f'File {file} should exist in {dir}'
+    )
+
 def assert_file_not_exists(dir, file):
     assert (
         not exists(join(dir, file+'.txt')), 
@@ -167,6 +173,40 @@ def test_sync():
     
     # Delete the directories
     rmdirs(SOURCE, DESTINATION)
+
+
+def test_update_hourly():
+    '''
+    Check if the update function is correctly defined for the hourly backups
+    '''
+    # Create the necessary directories and files
+    new_file(join(DESTINATION, DIRECTORY), 'A', 'File A: Old content')
+    new_file(SOURCE, 'A', 'File A: New content')
+    for hour in HOURS:
+        SnapBack(SOURCE, DESTINATION, DIRECTORY).update(hour)
+        assert_file_exists(join(BACKUP_DIR, get_hourly_dir(hour)), 'A')
+
+
+def test_update_daily():
+    '''
+    Check if the update function is correctly defined for the rest of the backups
+    '''
+    # Create the necessary directories and files
+    new_file(join(DESTINATION, DIRECTORY), 'A', 'File A: Old content')
+    new_file(SOURCE, 'A', 'File A: New content')
+
+    for i in range(1, 24*4*7*4+1):
+        SnapBack(SOURCE, DESTINATION, DIRECTORY).update()
+        match i:
+            case      1*4: assert_file_exists(join(BACKUP_DIR, 'daily.1'), 'A')
+            case      2*4: assert_file_exists(join(BACKUP_DIR, 'daily.2'), 'A')
+            case      3*4: assert_file_exists(join(BACKUP_DIR, 'daily.3'), 'A')
+            case      7*4: assert_file_exists(join(BACKUP_DIR, 'weekly.1'), 'A')
+            case    2*7*4: assert_file_exists(join(BACKUP_DIR, 'weekly.2'), 'A')
+            case    4*7*4: assert_file_exists(join(BACKUP_DIR, 'monthly.1'), 'A')
+            case  2*4*7*4: assert_file_exists(join(BACKUP_DIR, 'monthly.2'), 'A')
+            case 12*4*7*4: assert_file_exists(join(BACKUP_DIR, 'yearly.1'), 'A')
+            case 24*4*7*4: assert_file_exists(join(BACKUP_DIR, 'yearly.2'), 'A')
 
 
 def test_restore():

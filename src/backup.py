@@ -10,8 +10,10 @@ def main():
 
     # Backup all directories for each remote
     for remote in config['remotes'].values():
-        for directory, source in config['directories'].items():
-            SnapBack(source, remote, directory).update()
+        for directory, source in config['directories'].keys():
+            SnapBack(source, remote, directory).update(
+                hour=str(datetime.now().hour).zfill(2)
+            )
             print(f'[{datetime.now()}] "{directory}" was backed up on "{remote}"')
 
 

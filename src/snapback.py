@@ -4,11 +4,14 @@ import datetime
 from rclone_python import rclone
 from os.path import join
 
+# TODO: Let it be in the configuration file
+HOURS = ['12', '16', '20', '00']
+
 
 def get_hourly_dir(hour):
     if hour == '00': 
         return 'hourly.24'
-    elif hour in ['12', '16', '20', '00']:
+    elif hour in HOURS:
         return 'hourly.' + hour
     else: 
         return None
@@ -69,7 +72,7 @@ class SnapBack:
         '''
         rclone.move(join(self.backup_dir, a), join(self.backup_dir, b))
 
-    def update(self):
+    def update(self, hour):
         '''
         Description here
         '''
@@ -83,10 +86,10 @@ class SnapBack:
         month = datetime.now().strftime("%B")
         year = datetime.now().year
 
-        update_daily_backup = day != self.config['last_backup']['daily']
-        update_weely_backup = week != self.config['last_backup']['weekly']
-        update_monthly_backup = month != self.config['last_backup']['monthly']
-        update_yearly_backup = year != self.config['last_backup']['yearly']
+        update_daily_backup = day!=self.config['last_backup']['daily']
+        update_weely_backup = week!=self.config['last_backup']['weekly']
+        update_monthly_backup = month!=self.config['last_backup']['monthly']
+        update_yearly_backup = year!=self.config['last_backup']['yearly']
 
         # --------------------------------------------------------------
         # 1. Sync destination with source and save the incremental output in .temp
@@ -95,7 +98,7 @@ class SnapBack:
         # --------------------------------------------------------------
         # 2. Save the backup in the hourly backup
         
-        if hourly_dir := get_hourly_dir(str(datetime.now().hour).zfill(2)):
+        if hourly_dir := get_hourly_dir(hour):
             self.copy('.temp', hourly_dir)
 
         # --------------------------------------------------------------
