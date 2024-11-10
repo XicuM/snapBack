@@ -33,7 +33,8 @@ def assert_file_not_exists(dir, file):
         f'File {file} should not longer exist in {dir}'
     )
 
-def rmdirs(*dirs): return (shutil.rmtree(dir) for dir in dirs)
+def rmdirs(*dirs): 
+    for dir in dirs: shutil.rmtree(dir) 
 
 
 def test_config():
@@ -71,6 +72,7 @@ def test_accumulate():
     of the .temp directory into the daily.1 directory: AB + A' = AB
     '''
     # Create the necessary directories and files
+    rmdirs(SOURCE, DESTINATION)
     new_file(join(BACKUP_DIR,'.temp'),   'A', 'File A: New content')
     new_file(join(BACKUP_DIR,'.temp'),   'B', 'File B')
     time.sleep(1)
@@ -92,9 +94,6 @@ def test_accumulate():
         message='File B should be copied to daily.1'
     )
 
-    # Delete the directories
-    rmdirs(join(BACKUP_DIR,'.temp'), join(BACKUP_DIR,'daily.1'))
-
 
 def test_move():
     '''
@@ -102,6 +101,7 @@ def test_move():
     of the .temp directory into the daily.1 directory: AB -> A' = AB
     '''
     # Create the necessary directories and files
+    rmdirs(SOURCE, DESTINATION)
     new_file(join(BACKUP_DIR,'daily.1'), 'A', 'File A: Newer content')
     new_file(join(BACKUP_DIR,'daily.1'), 'B', 'File B')
     time.sleep(1)
@@ -123,15 +123,13 @@ def test_move():
         message='File B should be copied to daily.1'
     )
 
-    # Delete the directories
-    rmdirs(SOURCE, DESTINATION)
-
 
 def test_sync():
     '''
     Check if the sync function is correctly defined
     '''
     # Create the necessary directories and files
+    rmdirs(SOURCE, DESTINATION)
     new_file(join(DESTINATION, DIRECTORY), 'A', 'File A: Older content')
     time.sleep(1)
     new_file(SOURCE, 'A', 'File A: Newer content')
@@ -170,9 +168,6 @@ def test_sync():
         message='File A should have been backed up to .temp'
     )
     assert_file_not_exists(join(BACKUP_DIR, '.temp'), 'B')
-    
-    # Delete the directories
-    rmdirs(SOURCE, DESTINATION)
 
 
 def test_update_hourly():
@@ -180,37 +175,77 @@ def test_update_hourly():
     Check if the update function is correctly defined for the hourly backups
     '''
     # Create the necessary directories and files
+    rmdirs(SOURCE, DESTINATION)
     new_file(join(DESTINATION, DIRECTORY), 'A', 'File A: Old content')
+    time.sleep(0.1)
     new_file(SOURCE, 'A', 'File A: New content')
-    for hour in HOURS:
+
+    for i, hour in enumerate(HOURS):
+        new_file(SOURCE, 'B', 'File B modified just before ' + hour)
+        time.sleep(0.1)
         SnapBack(SOURCE, DESTINATION, DIRECTORY).update(hour)
-        assert_file_exists(join(BACKUP_DIR, get_hourly_dir(hour)), 'A')
+        assert_file_content(
+            file=join(DESTINATION, DIRECTORY, 'B.txt'),
+            content='File B modified just before ' + hour,
+            message='File B should have been synced'
+        )
+        if i == 0:
+            assert_file_content(
+                file=join(BACKUP_DIR, get_hourly_dir(hour), 'A.txt'),
+                content='File A: Old content',
+                message=f'Old version of A should have been moved to {get_hourly_dir(hour)}'
+            )
+        else:
+            assert_file_content(
+                file=join(BACKUP_DIR, get_hourly_dir(hour), 'B.txt'),
+                content='File B modified just before ' + HOURS[i-1],
+                message=f'Old version of B should have been moved to {get_hourly_dir(hour)}'
+            )
+    
+    assert_file_not_exists(join(BACKUP_DIR, get_hourly_dir('12')), 'A')
+    assert_file_not_exists(join(BACKUP_DIR, get_hourly_dir('16')), 'A')
+    assert_file_not_exists(join(BACKUP_DIR, get_hourly_dir('20')), 'A')
 
 
-def test_update_daily():
+def test_update_yearly():
     '''
     Check if the update function is correctly defined for the rest of the backups
     '''
     # Create the necessary directories and files
+    rmdirs(SOURCE, DESTINATION)
     new_file(join(DESTINATION, DIRECTORY), 'A', 'File A: Old content')
+    time.sleep(0.1)
     new_file(SOURCE, 'A', 'File A: New content')
 
+    config = {
+        'last_backup': {
+            'daily': 0,
+            'monthly': 'None',
+            'weekly': 0,
+            'yearly': 0,
+        }
+    }
     for i in range(1, 24*4*7*4+1):
-        SnapBack(SOURCE, DESTINATION, DIRECTORY).update()
-        match i:
-            case      1*4: assert_file_exists(join(BACKUP_DIR, 'daily.1'), 'A')
-            case      2*4: assert_file_exists(join(BACKUP_DIR, 'daily.2'), 'A')
-            case      3*4: assert_file_exists(join(BACKUP_DIR, 'daily.3'), 'A')
-            case      7*4: assert_file_exists(join(BACKUP_DIR, 'weekly.1'), 'A')
-            case    2*7*4: assert_file_exists(join(BACKUP_DIR, 'weekly.2'), 'A')
-            case    4*7*4: assert_file_exists(join(BACKUP_DIR, 'monthly.1'), 'A')
-            case  2*4*7*4: assert_file_exists(join(BACKUP_DIR, 'monthly.2'), 'A')
-            case 12*4*7*4: assert_file_exists(join(BACKUP_DIR, 'yearly.1'), 'A')
-            case 24*4*7*4: assert_file_exists(join(BACKUP_DIR, 'yearly.2'), 'A')
-
+        updates = {
+            'daily':   i %        (4) == 0,
+            'weekly':  i %      (7*4) == 0,
+            'monthly': i %    (4*7*4) == 0,
+            'yearly':  i % (12*4*7*4) == 0
+        }
+        SnapBack(SOURCE, DESTINATION, DIRECTORY, config).update('00', updates)
+        if i ==      1*4: assert_file_exists(join(BACKUP_DIR, 'daily.1'), 'A')
+        if i ==      2*4: assert_file_exists(join(BACKUP_DIR, 'daily.2'), 'A')
+        if i ==      3*4: assert_file_exists(join(BACKUP_DIR, 'daily.3'), 'A')
+        if i ==      7*4: assert_file_exists(join(BACKUP_DIR, 'weekly.1'), 'A')
+        if i ==    2*7*4: assert_file_exists(join(BACKUP_DIR, 'weekly.2'), 'A')
+        if i ==    4*7*4: assert_file_exists(join(BACKUP_DIR, 'monthly.1'), 'A')
+        if i ==  2*4*7*4: assert_file_exists(join(BACKUP_DIR, 'monthly.2'), 'A')
+        if i ==  3*4*7*4: assert_file_exists(join(BACKUP_DIR, 'monthly.3'), 'A')
+        if i == 12*4*7*4: assert_file_exists(join(BACKUP_DIR, 'yearly.1'), 'A')
+        if i == 24*4*7*4: assert_file_exists(join(BACKUP_DIR, 'yearly.2'), 'A')
 
 def test_restore():
     '''
     Check if the restore function is correctly defined
     '''
-    pass
+    rmdirs(SOURCE, DESTINATION)

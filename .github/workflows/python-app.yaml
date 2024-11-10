@@ -37,3 +37,6 @@ jobs:
         Expand-Archive rclone.zip -DestinationPath rclone
         Move-Item rclone\rclone-*-windows-amd64\rclone.exe rclone.exe
         $env:PATH += ";$PWD\rclone"
+    - name: Test with pytest
+      run: |
+        pytest

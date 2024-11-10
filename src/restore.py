@@ -1,14 +1,10 @@
 import yaml
 import argparse
-from datetime import datetime
+import logging as log
 from snapback import SnapBack
 
-def main():
-    # Load the configuration
-    with open('config.yaml', 'r') as f:
-        config = yaml.safe_load(f)
 
-    # Create the argument parser
+def command_parser(config: dict) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="snapBack restore")
     parser.add_argument('remote', 
         type=str,
@@ -27,8 +23,34 @@ def main():
                  'monthly.1', 'monthly.2', 'monthly.3', 'yearly.1', 'yearly.2'],
         help='Snapback to restore'
     )
+    parser.add_argument(
+        '--log-level',
+        type=str,
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        default='ERROR',
+        help='Set the logging level (default: ERROR)'
+    )
     
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+
+    # Load the configuration
+    with open('config.yaml', 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Create the argument parser
+    args = command_parser(config)
+    
+    # Set the logging configuration
+    log.basicConfig(
+        level=getattr(log, args.log_level),
+        filename='snapback.log',
+        filemode='a',
+        format='%(asctime)s [%(levelname)s] %(message)s'
+    )
+
     SnapBack(
         config['directories'][args.directory], 
         config['remotes'][args.remote],

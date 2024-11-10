@@ -1,0 +1,9 @@
+last_backup:
+  daily: 5
+  monthly: November
+  weekly: 45
+  yearly: 2024
+  
+last_execution:
+  failing_point: None
+  success: true

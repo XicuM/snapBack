@@ -1,25 +1,20 @@
-# Configuration file for the backup script
-
-# Write here the remotes you want to backup
-# Syntax > <remote_alias>: <remote>:<backup_path>
-remotes:
-  raspi: raspi:~/backups
-  onedrive: onedrive:/
-
-# Write here the directories from your local machine you want to backup
-# Syntax > <dir_alias>: <dir_path>
+daily_backup_hours:
+- '00'
+- '12'
+- '16'
+- '20'
 directories:
+  cities_skylines: C:\Users\xicu\AppData\Local\Colossal Order\Cities_Skylines
   documents: C:\Users\xicu\Documents
   minecraft: C:\Users\xicu\AppData\Roaming\.minecraft
-  cities_skylines: C:\Users\xicu\AppData\Local\Colossal Order\Cities_Skylines
-
-# Backup data
-# Do not modify this section
 last_backup:
-  daily: 10
-  weekly: 10
-  monthly: 1
-  yearly: 2023
+  daily: 6
+  monthly: November
+  weekly: 45
+  yearly: 2024
 last_execution:
-  success: true
   failing_point: None
+  success: true
+remotes:
+  onedrive: onedrive:/
+  raspi: raspi:~/backups
