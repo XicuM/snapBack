@@ -1,13 +1,18 @@
 import subprocess
+import yaml
+import sys
+import os
 
+PROJECT_DIR = os.getcwd()
+PYTHON_PATH = sys.executable
 
-PROJECT_DIR = r'$env:USERPROFILE\Documents\projects\backups'
-HOURS = ['00', '12', '16', '20']
+with open('config.yaml', 'r') as f:
+    HOURS = yaml.safe_load(f)['daily_backup_hours']
 
 
 def run_powershell_command(command):
     result = subprocess.run(
-        ['powershell', '-Command', command, '-Verb', 'runAs'],
+        ['powershell', '-Command', command],
         capture_output=True,
         text=True
     )
@@ -18,8 +23,8 @@ def schedule_tasks():
 
     define_action = rf'''
         $Action = New-ScheduledTaskAction `
-            -Execute "python" `
-            -Argument "src\backup.py"
+            -Execute "{PYTHON_PATH}" `
+            -Argument "src\backup.py" `
             -WorkingDirectory "{PROJECT_DIR}"  
     '''
     create_trigger_list = '''
@@ -32,23 +37,23 @@ def schedule_tasks():
     register_task = r'''
         $Settings = New-ScheduledTaskSettingsSet `
             -AllowStartIfOnBatteries `
-            -DontStopIfGoingOnBatteries `
-            -StartWhenAvailable
+            -StartWhenAvailable:$false `
+            -DontStopIfGoingOnBatteries
 
         Register-ScheduledTask `
             -Action $Action `
             -Trigger $Triggers `
             -Settings $Settings `
-            -TaskName "backups" `
+            -TaskName "snapBack" `
             -Description "Runs daily backups for my documents"
     '''
 
-    run_powershell_command(
+    print(run_powershell_command(
         define_action + 
         create_trigger_list + 
         ''.join(define_trigger(hour) for hour in HOURS) + 
         register_task
-    )
+    )[1])
 
 if __name__ == '__main__':
     schedule_tasks()

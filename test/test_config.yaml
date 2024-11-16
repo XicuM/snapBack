@@ -1,0 +1,11 @@
+jobs:
+  test_job:
+    destination: test/test_data/destination
+    directories:
+      test_directory: test/test_data/source
+
+daily_backup_hours:
+- '00'
+- '12'
+- '16'
+- '20'

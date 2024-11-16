@@ -37,20 +37,29 @@ def rmdirs(*dirs):
     for dir in dirs: shutil.rmtree(dir) 
 
 
-def test_config():
+def test_config_files():
     '''
-    Check if the configuration file is correctly loaded
+    Check if the configuration files are correctly loaded
     '''
     with open('config.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
     assert (
-        config.keys() == {'directories', 'remotes', 'last_backup'}, 
-        'Configuration file should have directories, remotes, and last_backup keys'
+        config.keys() == {'jobs', 'daily_backup_hours'}, 
+        'Configuration file should have keys "jobs" and "daily_backup_hours"'
     )
+    for job_name, job in config['jobs'].items():
+        assert (
+            job.keys() == {'destination', 'directories'},
+            f'Job "{job_name}" should have keys "destination" and "directories"'
+        )
+
+    with open('last_snapback.yaml', 'r') as f:
+        last_backup = yaml.safe_load(f)
+
     assert (
-        config['last_backup'].keys() == {'daily', 'weekly', 'monthly', 'yearly'},
-        'last_backup should have daily, weekly, monthly, and yearly keys'
+        last_backup.keys() == {'day', 'week', 'month', 'year', 'failing_point', 'success'},
+        'Last backup file should have keys "day", "week", "month", "year", "failing_point", and "success"'
     )
 
 
@@ -79,7 +88,7 @@ def test_accumulate():
     new_file(join(BACKUP_DIR,'daily.1'), 'A', 'File A: Old content')
 
     # Perform the accumulation
-    SnapBack(SOURCE, DESTINATION, DIRECTORY).accumulate('.temp', 'daily.1')
+    SnapBack(SOURCE, DESTINATION, DIRECTORY)._accumulate('.temp', 'daily.1')
 
     # Check if the directory was correctly accumulated
     assert_file_not_exists(join(BACKUP_DIR, '.temp'), 'A')
@@ -107,7 +116,7 @@ def test_move():
     time.sleep(1)
     new_file(join(BACKUP_DIR,'daily.2'), 'A', 'File A: Older content')
 
-    SnapBack(SOURCE, DESTINATION, DIRECTORY).move('daily.1', 'daily.2')
+    SnapBack(SOURCE, DESTINATION, DIRECTORY)._move('daily.1', 'daily.2')
 
     # Check if the directory was correctly moved
     assert_file_not_exists(join(BACKUP_DIR, 'daily.1'), 'A')
@@ -135,7 +144,7 @@ def test_sync():
     new_file(SOURCE, 'A', 'File A: Newer content')
     new_file(SOURCE, 'B', 'File B')
 
-    SnapBack(SOURCE, DESTINATION, DIRECTORY).sync()
+    SnapBack(SOURCE, DESTINATION, DIRECTORY)._sync()
 
     # Check if source remains the same
     assert_file_content(

@@ -2,3 +2,5 @@ __pycache__
 .pytest_cache
 test_data/
 snapback.log
+config.yaml
+last_snapback.yaml

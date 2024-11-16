@@ -27,7 +27,7 @@ def delete_task(task_name):
     ''')
 
 
-def test_schedule_task():
+def test_schedule_task(): # TODO: this will fail if the task is already scheduled
     
     # Schedule the backup tasks
     schedule_tasks()

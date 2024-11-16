@@ -1,9 +1,10 @@
-import os
 import yaml
+import subprocess
 import logging as log
+from os.path import join
 from datetime import datetime as dt
 from rclone_python import rclone
-from os.path import join
+
 
 with open('config.yaml', 'r') as f:
     HOURS = yaml.safe_load(f)['daily_backup_hours']
@@ -18,43 +19,113 @@ def get_hourly_dir(hour: str) -> str:
         return None
 
 
-def ensure_dir_exists(dir: str):
-    if not os.path.exists(dir): os.makedirs(dir)
+class LastSnapBackData:
 
-class SnapBack:
+    def __init__(self, file: str = 'last_snapback.yaml'):
+        self.job_name = None
+        self.dir_name = None
+        try:
+            with open(file, 'r') as f:
+                self.data = yaml.safe_load(f)
+        except FileNotFoundError:
+            log.exception('No configuration file found')
+        except yaml.YAMLError:
+            log.exception('Error parsing the configuration file config.yaml')
+
+    def select_job(self, job_name: str):
+
+        # Create a new job if it doesn't exist
+        if job_name not in self.data.keys(): 
+            self.data[job_name] = {}
+
+        self.job_name = job_name
+
+    def select_dir(self, dir_name: str): 
+
+        # Check if a job has been selected
+        if self.job_name is None: 
+            log.error('No job selected')
+            return
+        
+        # Create a new directory if it doesn't exist
+        if dir_name not in self.data[self.job_name].keys(): 
+            self.data[self.job_name][dir_name] = {
+                'day': 0, 'month': 'None', 'week': 0, 'year': 0
+            }
+
+        self.dir_name = dir_name
     
-    def __init__(self,  
-        source: str, 
-        destination: str, 
-        dir_name: str, 
-        config: dict = None
+    def __setitem__(self, key, value):
+        self.data[self.job_name][self.dir_name][key] = value
+        with open('last_snapback.yaml', 'w') as f: yaml.dump(self.data, f)
+   
+    def __getitem__(self, key):
+        return self.data[self.job_name][self.dir_name][key]
+
+
+class SnapBackJob:
+
+    def __init__(self, 
+        job_name: str, 
+        job_data: dict, 
+        last_snapback_data: LastSnapBackData
     ):
-        self.sour_path = source
-        self.dest_path = join(destination, dir_name)
-        self.backup_dir = join(destination, '.snapbacks', dir_name)
+        self.job_data = job_data
+        last_snapback_data.select_job(job_name)
+        self.last_snapback_data = last_snapback_data
 
-        ensure_dir_exists(self.dest_path)
-        ensure_dir_exists(self.backup_dir)
+    def perform(self, hour: str):
+        for dir_name, source in self.job_data['directories'].items():
 
-        if config:
-            self.config = config
-        else:
-            try:
-                with open('config.yaml', 'r') as f:
-                    self.config = yaml.safe_load(f)
-            except FileNotFoundError:
-                log.exception('No configuration file found')
-            except yaml.YAMLError:
-                log.exception('Error parsing the configuration file config.yaml')
+            self.last_snapback_data.select_dir(dir_name)
 
-    def save_config(self):
-        with open('config.yaml', 'w') as f: yaml.dump(self.config, f)
+            if type(source) == dict:
+                sour_path = source['path']
+                exclude = source['exclude']
+            else:
+                sour_path = source
+                exclude = []
 
-    def sync(self):
+            SnapBackUpdate(
+                sour_path=sour_path,
+                dest_path=self.job_data['destination'],
+                dir_name=dir_name,
+                last_snapback_data=self.last_snapback_data,
+                exclude=exclude
+            ).perform_update(hour)
+
+        log.info(f'Completed successfully')
+
+
+class SnapBackUpdate:
+    
+    def __init__(self,
+        sour_path: str,
+        dest_path: str,
+        dir_name: str,
+        last_snapback_data: LastSnapBackData,
+        exclude: list = []
+    ):
+        self.sour_path = sour_path
+        self.dest_path = join(dest_path, dir_name)
+        self.backup_dir = join(dest_path, '.snapbacks', dir_name)
+        self.exclude = exclude
+        last_snapback_data.select_dir(dir_name)
+        self.last_snapback_data = last_snapback_data
+
+    def _ensure_dir_exists(self, dir: str):
+        '''
+        Ensure that the directory exists, if not create it
+        '''
+        result = subprocess.run(['rclone', 'mkdir', dir])
+        if result.returncode:
+            log.error(f'Error creating directory {dir}')
+
+    def _sync(self):
         '''
         Sync the source directory with the destination directory
         '''
-        ensure_dir_exists(temp_dir := join(self.backup_dir,".temp"))
+        self._ensure_dir_exists(temp_dir := join(self.backup_dir, '.temp'))
         try:
             rclone.sync(
                 self.sour_path, 
@@ -63,115 +134,89 @@ class SnapBack:
                     '--fast-list', 
                     '--links',
                     f'--backup-dir {temp_dir}'
-                ]
+                ].extend(
+                    ['--exclude '+x for x in self.exclude]
+                ),
             )
         except:
             log.exception(f'Error syncing {self.sour_path} to destination')
 
-    def copy(self, a: str, b: str):
+    def _copy(self, a: str, b: str):
         '''
         Copy the contents of directory a into directory b
         '''
-        ensure_dir_exists(in_path := join(self.backup_dir, a))
+        self._ensure_dir_exists(in_path := join(self.backup_dir, a))
         try: rclone.copy(in_path, join(self.backup_dir, b))
         except: log.exception(f'Error copying {a} to {b}')
 
-    def accumulate(self, a: str, b: str):
+    def _accumulate(self, a: str, b: str):
         '''
         Accumulate the contents of directory a into directory b
         ignoring existing files (i.e., only new files are copied)
         '''
-        ensure_dir_exists(in_path := join(self.backup_dir, a))
-        ensure_dir_exists(out_path := join(self.backup_dir, b))
+        self._ensure_dir_exists(in_path := join(self.backup_dir, a))
+        self._ensure_dir_exists(out_path := join(self.backup_dir, b))
         try:
             rclone.copy(in_path, out_path, args=['--ignore-existing'])
             rclone.delete(in_path)
         except:
             log.exception(f'Error accumulating {a} into {b}')
     
-    def move(self, a: str, b: str):
+    def _move(self, a: str, b: str):
         '''
         Replace the contents of directory b with the contents of directory a
         '''
-        ensure_dir_exists(in_path := join(self.backup_dir, a))
+        self._ensure_dir_exists(in_path := join(self.backup_dir, a))
         try: rclone.move(in_path, join(self.backup_dir, b))
         except: log.exception(f'Error moving {a} to {b}')
 
-    def update(self, hour: str, updates: dict = None):
+    def perform_update(self, hour: str):
         '''
-        Description here
+        Perfoms the complete reverse incremental backup process
         '''
-
-        # --------------------------------------------------------------
-        # 0. See what needs to be updated
-
-        day = dt.now().weekday()
+        day = dt.now().day
         week = dt.now().isocalendar()[1]
         month = dt.now().strftime("%B")
         year = dt.now().year
 
-        if updates:
-            update_daily_backup   = updates['daily']
-            update_weely_backup   = updates['weekly']
-            update_monthly_backup = updates['monthly']
-            update_yearly_backup  = updates['yearly']
-        else:
-            update_daily_backup   = day   != self.config['last_backup']['daily']
-            update_weely_backup   = week  != self.config['last_backup']['weekly']
-            update_monthly_backup = month != self.config['last_backup']['monthly']
-            update_yearly_backup  = year  != self.config['last_backup']['yearly']
+        update_daily_backup   = day   != self.last_snapback_data['day']
+        update_weely_backup   = week  != self.last_snapback_data['week']
+        update_monthly_backup = month != self.last_snapback_data['month']
+        update_yearly_backup  = year  != self.last_snapback_data['year']
 
-        # --------------------------------------------------------------
-        # 1. Sync destination with source and save the incremental output in .temp
-        self.sync()
+        self._sync()
 
-        # --------------------------------------------------------------
-        # 2. Save the backup in the hourly backup
-        
-        if hourly_dir := get_hourly_dir(hour):
-            self.copy('.temp/', hourly_dir)
-
-        # --------------------------------------------------------------
-        # 3. Update the DAILY backups
+        if hourly_dir := get_hourly_dir(hour): 
+            self._copy('.temp/', hourly_dir)
 
         if update_daily_backup:
-            self.move('daily.2/', 'daily.3/')
-            self.move('daily.1/', 'daily.2/')
-            self.config['last_backup']['daily'] = day
-            #self.save_config()
-        self.accumulate('.temp/', 'daily.1/')
-
-        # --------------------------------------------------------------
-        # 4. Update the WEEKLY backups
+            self._move('daily.2/', 'daily.3/')
+            self._move('daily.1/', 'daily.2/')
+            self.last_snapback_data['day'] = day
+            log.info('Daily backup performed')
+        self._accumulate('.temp/', 'daily.1/')
 
         if update_weely_backup:
-            self.move('weekly.1/', 'weekly.2/')
-            self.config['last_backup']['weekly'] = week
-            #self.save_config()
+            self._move('weekly.1/', 'weekly.2/')
+            self.last_snapback_data['week'] = week
+            log.info('Weekly backup performed')
         if update_daily_backup:
-            self.accumulate('daily.1/', 'weekly.1/')
-
-        # --------------------------------------------------------------
-        # 5. Update the MONTHLY backups
+            self._accumulate('daily.1/', 'weekly.1/')
 
         if update_monthly_backup:
-            self.move('monthly.2/', 'monthly.3/')
-            self.move('monthly.1/', 'monthly.2/')
-            self.config['last_backup']['monthly'] = month
-            #self.save_config()
+            self._move('monthly.2/', 'monthly.3/')
+            self._move('monthly.1/', 'monthly.2/')
+            self.last_snapback_data['month'] = month
+            log.info('Monthly backup performed')
         if update_weely_backup:
-            self.accumulate('weekly.1/', 'monthly.1/')
-
-        # --------------------------------------------------------------
-        # 6. Update the YEARLY backups
+            self._accumulate('weekly.1/', 'monthly.1/')
 
         if update_yearly_backup:
-            self.move('yearly.1/', 'yearly.2/')
-            self.config['last_backup']['yearly'] = year
-            #self.save_config()
+            self._move('yearly.1/', 'yearly.2/')
+            self.last_snapback_data['year'] = year
+            log.info('Yearly backup performed')
         if update_monthly_backup:
-            self.accumulate('monthly.1/', 'yearly.1/')
-
+            self._accumulate('monthly.1/', 'yearly.1/')
 
     def restore(snapback: str):
         pass

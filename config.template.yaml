@@ -1,0 +1,26 @@
+# This file is a template of the configuration for the backup script.
+# Copy this file to config.yaml and fill in the necessary information.
+
+# The jobs to be performed by the backup script.
+jobs:
+
+  job1:                                         # The name of the job. It is used to identify the job in the logs.
+    destination: "remote:path/to/backup"        # The destination of the backup. It can be a local path or a remote path.
+    directories:                                # The local directories to be backed up. 
+      documents: C:\Users\<User>\Documents      # The name of the directory in the destination and its local path.
+      game: C:\Users\<User>\path\to\game_data   # The same as above.
+  
+  job2:
+    destination: "remote:path/to/backup"
+    directories:
+      documents: 
+        path: C:\Users\<User>\Documents
+        exclude:                                # The directories inside the directory to be excluded from the backup.
+          - C:\Users\<User>\Documents\big_projects
+
+# The hours at which the backup will be performed
+daily_backup_hours:
+- '00'
+- '12'
+- '16'
+- '20'

@@ -48,7 +48,7 @@ def main():
         level=getattr(log, args.log_level),
         filename='snapback.log',
         filemode='a',
-        format='%(asctime)s [%(levelname)s] %(message)s'
+        format='%(asctime)s Restore: [%(levelname)s] %(message)s'
     )
 
     SnapBack(

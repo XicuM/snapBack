@@ -1,8 +1,9 @@
+import os
 import yaml
 import argparse
 import logging as log
 from datetime import datetime
-from snapback import SnapBack
+from snapback import SnapBackJob, LastSnapBackData
 
 
 def command_parser():
@@ -25,6 +26,14 @@ def main():
     with open('config.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
+    # Create data file if it doesn't exist
+    if not os.path.exists('last_snapback.yaml'):
+        with open('last_snapback.yaml', 'w') as f:
+            yaml.dump({
+                'day': 0, 'month': 'None', 'week': 0, 'year': 0,
+                'failing_point': None, 'success': False
+            }, f)
+
     # Create the argument parser
     args = command_parser()
 
@@ -36,13 +45,14 @@ def main():
         format='%(asctime)s [%(levelname)s] %(message)s'
     )
 
-    # Backup all directories for each remote
-    for remote in config['remotes'].values():
-        for directory, source in config['directories'].keys():
-            SnapBack(source, remote, directory).update(
-                hour=str(datetime.now().hour).zfill(2)
-            )
-            print(f'[{datetime.now()}] "{directory}" was backed up on "{remote}"')
+    last_snapback_data = LastSnapBackData()
+
+    for job_name, job_data in config['jobs'].items():
+        SnapBackJob(job_name, job_data, last_snapback_data).perform(
+            hour=str(datetime.now().hour).zfill(2)
+        )
+
+    log.info('All jobs completed successfully')
 
 
 if __name__ == '__main__':
