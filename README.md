@@ -120,7 +120,6 @@ flowchart LR
 
 ## Developer notes
 
-- [x] Separate config file from last backup information.
-- [x] Class SnapBack should be config agnostic, without access to the config file, but rather receive the necessary information as arguments.
 - [ ] Fix the following problem: imagine the program crashes. Would it know if the operation has been successful or no?
-- [ ] Ensure scheduled tasks are running.
+- [x] Ensure scheduled tasks are running.
+- [ ] Rewrite the tests

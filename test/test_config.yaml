@@ -3,6 +3,10 @@ jobs:
     destination: test/test_data/destination
     directories:
       test_directory: test/test_data/source
+      test_directory_with_exclude: 
+        path: test/test_data/source
+        exclude: [ exclude1/*, exclude2/* ]
+      
 
 daily_backup_hours:
 - '00'

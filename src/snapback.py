@@ -27,10 +27,23 @@ class LastSnapBackData:
         try:
             with open(file, 'r') as f:
                 self.data = yaml.safe_load(f)
+                if self.data is None: self.data = {}
         except FileNotFoundError:
             log.exception('No configuration file found')
         except yaml.YAMLError:
             log.exception('Error parsing the configuration file config.yaml')
+
+    def reset_dir(self, dir_name: str):
+        if self.job_name is None: 
+            log.error('No job selected')
+            return
+
+        self.data[self.job_name][dir_name] = {
+            'day': 0, 'month': 'None', 'week': 0, 'year': 0,
+            'failing_point': None, 'success': False
+        }
+        with open('last_snapback.yaml', 'w') as f: yaml.dump(self.data, f)
+        return self
 
     def select_job(self, job_name: str):
 
@@ -39,6 +52,7 @@ class LastSnapBackData:
             self.data[job_name] = {}
 
         self.job_name = job_name
+        return self
 
     def select_dir(self, dir_name: str): 
 
@@ -49,17 +63,20 @@ class LastSnapBackData:
         
         # Create a new directory if it doesn't exist
         if dir_name not in self.data[self.job_name].keys(): 
-            self.data[self.job_name][dir_name] = {
-                'day': 0, 'month': 'None', 'week': 0, 'year': 0
-            }
+            self.reset_dir(dir_name)
 
         self.dir_name = dir_name
+        return self
     
     def __setitem__(self, key, value):
+        if self.job_name is None or self.dir_name is None:
+            log.error('No job or directory selected')
         self.data[self.job_name][self.dir_name][key] = value
         with open('last_snapback.yaml', 'w') as f: yaml.dump(self.data, f)
    
     def __getitem__(self, key):
+        if self.job_name is None or self.dir_name is None:
+            log.error('No job or directory selected')
         return self.data[self.job_name][self.dir_name][key]
 
 
@@ -126,20 +143,12 @@ class SnapBackUpdate:
         Sync the source directory with the destination directory
         '''
         self._ensure_dir_exists(temp_dir := join(self.backup_dir, '.temp'))
-        try:
-            rclone.sync(
-                self.sour_path, 
-                self.dest_path,
-                args=[
-                    '--fast-list', 
-                    '--links',
-                    f'--backup-dir {temp_dir}'
-                ].extend(
-                    ['--exclude '+x for x in self.exclude]
-                ),
-            )
-        except:
-            log.exception(f'Error syncing {self.sour_path} to destination')
+
+        args = ['--fast-list', '--links', f'--backup-dir {temp_dir}']
+        args.extend([f'--exclude {x}' for x in self.exclude])
+        
+        try: rclone.sync(self.sour_path, self.dest_path, args=args)
+        except: log.exception(f'Error syncing {self.sour_path} to destination')
 
     def _copy(self, a: str, b: str):
         '''

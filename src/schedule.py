@@ -55,5 +55,6 @@ def schedule_tasks():
         register_task
     )[1])
 
+
 if __name__ == '__main__':
     schedule_tasks()

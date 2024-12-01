@@ -6,7 +6,7 @@ from os.path import join, exists
 
 
 # Define the source and destination directories for testing
-DIRECTORY = 'directory'
+DIRECTORY = 'test_directory'
 SOURCE = join('test', 'test_data', 'source')
 DESTINATION = join('test', 'test_data', 'destination')
 BACKUP_DIR = join(DESTINATION, '.snapbacks', DIRECTORY)
@@ -34,7 +34,8 @@ def assert_file_not_exists(dir, file):
     )
 
 def rmdirs(*dirs): 
-    for dir in dirs: shutil.rmtree(dir) 
+    for dir in dirs: 
+        if exists(dir): shutil.rmtree(dir) 
 
 
 def test_config_files():
@@ -88,7 +89,7 @@ def test_accumulate():
     new_file(join(BACKUP_DIR,'daily.1'), 'A', 'File A: Old content')
 
     # Perform the accumulation
-    SnapBack(SOURCE, DESTINATION, DIRECTORY)._accumulate('.temp', 'daily.1')
+    SnapBackUpdate(SOURCE, DESTINATION, DIRECTORY)._accumulate('.temp', 'daily.1')
 
     # Check if the directory was correctly accumulated
     assert_file_not_exists(join(BACKUP_DIR, '.temp'), 'A')
@@ -116,7 +117,7 @@ def test_move():
     time.sleep(1)
     new_file(join(BACKUP_DIR,'daily.2'), 'A', 'File A: Older content')
 
-    SnapBack(SOURCE, DESTINATION, DIRECTORY)._move('daily.1', 'daily.2')
+    SnapBackUpdate(SOURCE, DESTINATION, DIRECTORY)._move('daily.1', 'daily.2')
 
     # Check if the directory was correctly moved
     assert_file_not_exists(join(BACKUP_DIR, 'daily.1'), 'A')
@@ -144,7 +145,7 @@ def test_sync():
     new_file(SOURCE, 'A', 'File A: Newer content')
     new_file(SOURCE, 'B', 'File B')
 
-    SnapBack(SOURCE, DESTINATION, DIRECTORY)._sync()
+    SnapBackUpdate(SOURCE, DESTINATION, DIRECTORY)._sync()
 
     # Check if source remains the same
     assert_file_content(
@@ -179,6 +180,45 @@ def test_sync():
     assert_file_not_exists(join(BACKUP_DIR, '.temp'), 'B')
 
 
+def test_exclude():
+    '''
+    Check if the sync function can correctly exclude files
+    '''
+    # Create the necessary directories and files
+    rmdirs(SOURCE, DESTINATION)
+    new_file(SOURCE, 'A', 'File A')
+    new_file(join(SOURCE, 'exclude1'), 'B', 'File B')
+    new_file(join(SOURCE, 'exclude2'), 'C', 'File C')
+    new_file(join(SOURCE, 'not_excluded'), 'D', 'File D')
+
+    # Last snapback data
+    last_snapback_data = (LastSnapBackData('test/test_last_snapback.yaml')
+        .select_job('test_job')
+        .select_dir(DIRECTORY)
+        .reset_dir(DIRECTORY)
+    )
+
+    # Perform the sync with the excluded files
+    SnapBackUpdate(
+        sour_path=SOURCE, 
+        dest_path=DESTINATION, 
+        dir_name=DIRECTORY,
+        last_snapback_data=last_snapback_data,
+        exclude=['exclude1/*', 'exclude2/*']
+    )._sync()
+
+    # Check if the destination has no excluded files
+    assert_file_exists(join(DESTINATION, DIRECTORY), 'A')
+    assert_file_content(
+        file=join(DESTINATION, DIRECTORY, 'A.txt'),
+        content='File A',
+        message='File A should have been synced'
+    )
+    assert_file_not_exists(join(DESTINATION, DIRECTORY, 'exclude1'), 'B')
+    assert_file_not_exists(join(DESTINATION, DIRECTORY, 'exclude2'), 'C')
+    assert_file_exists(join(DESTINATION, DIRECTORY, 'not_excluded'), 'D')
+
+
 def test_update_hourly():
     '''
     Check if the update function is correctly defined for the hourly backups
@@ -192,7 +232,7 @@ def test_update_hourly():
     for i, hour in enumerate(HOURS):
         new_file(SOURCE, 'B', 'File B modified just before ' + hour)
         time.sleep(0.1)
-        SnapBack(SOURCE, DESTINATION, DIRECTORY).update(hour)
+        SnapBackUpdate(SOURCE, DESTINATION, DIRECTORY).update(hour)
         assert_file_content(
             file=join(DESTINATION, DIRECTORY, 'B.txt'),
             content='File B modified just before ' + hour,
@@ -241,7 +281,7 @@ def test_update_yearly():
             'monthly': i %    (4*7*4) == 0,
             'yearly':  i % (12*4*7*4) == 0
         }
-        SnapBack(SOURCE, DESTINATION, DIRECTORY, config).update('00', updates)
+        SnapBackUpdate(SOURCE, DESTINATION, DIRECTORY, config).update('00', updates)
         if i ==      1*4: assert_file_exists(join(BACKUP_DIR, 'daily.1'), 'A')
         if i ==      2*4: assert_file_exists(join(BACKUP_DIR, 'daily.2'), 'A')
         if i ==      3*4: assert_file_exists(join(BACKUP_DIR, 'daily.3'), 'A')
@@ -252,6 +292,7 @@ def test_update_yearly():
         if i ==  3*4*7*4: assert_file_exists(join(BACKUP_DIR, 'monthly.3'), 'A')
         if i == 12*4*7*4: assert_file_exists(join(BACKUP_DIR, 'yearly.1'), 'A')
         if i == 24*4*7*4: assert_file_exists(join(BACKUP_DIR, 'yearly.2'), 'A')
+
 
 def test_restore():
     '''
